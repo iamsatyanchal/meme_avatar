@@ -13,25 +13,38 @@ const image_urls = [
 ]
 
 
+const getDistance = (lat, lon) => {
+console.log(`${lat} ${lon}`);
+}
+
 app.get("/", async (req, res)=> {
+
+    const ip = req.query.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || null;
     const random = Math.floor(Math.random() * image_urls.length);
     const image = image_urls[random];
-    const response = await fetch(image);
+    const ip_details = await fetch(`http://ip-api.com/json/${ip}?fields=query,status,message,continent,continentCode,country,countryCode,regionName,region,city,district,zip,lat,lon,timezone,offset,currency,asname,isp,org,as,reverse,mobile,proxy,hosting`);
+    const ip_details_json = await ip_details.json();
 
 
-    if(!response.ok){
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch image"
-        });
-    }
+    const lat = ip_details_json.lat;
+    const lon = ip_details_json.lon;
+    res.json({ lat, lon });
+//     const response = await fetch(image);
 
-    const content_type = response.headers.get("content-type") || "image/jpeg";
-    const array_buffer = await response.arrayBuffer();
-    const buffer = Buffer.from(array_buffer);
 
-    res.setHeader("Content-Type", content_type);
-    res.send(buffer);
+//     if(!response.ok){
+//         return res.status(500).json({
+//             success: false,
+//             message: "Failed to fetch image"
+//         });
+//     }
+
+//     const content_type = response.headers.get("content-type") || "image/jpeg";
+//     const array_buffer = await response.arrayBuffer();
+//     const buffer = Buffer.from(array_buffer);
+
+//     res.setHeader("Content-Type", content_type);
+//     res.send(buffer);
 })
 
 app.listen(3000, ()=> {
