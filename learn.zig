@@ -16,16 +16,16 @@ const Order = struct {
     id: u64,
     side: Side,
     quantity: u64,
-    price: f64,
+    price: u64,
     timestamp: u128,
     status: OrderStatus,
 };
 
 const PriceLevel = struct {
-    price: f64,
+    price: u64,
     orders: std.ArrayList(Order),
 
-    fn init(allocator: std.mem.Allocator, price: f64) PriceLevel {
+    fn init(price: u64, allocator: std.mem.Allocator) PriceLevel {
         return .{
             .price = price,
             .orders = std.ArrayList(Order).init(allocator),
@@ -33,19 +33,23 @@ const PriceLevel = struct {
     }
 
     fn addOrder(self: *PriceLevel, order: Order) !void {
-        try self.append(order);
+        try self.orders.append(order);
     }
 
-    fn totalQuant(self: *PriceLevel) u64 {
+    fn totalQuantity(self: *const PriceLevel) u64 {
         var total: u64 = 0;
-        for (self.orders.item) |order| {
+        for (self.orders.items) |order| {
             total = total + order.quantity;
         }
         return total;
     }
+
+    fn deinit(self: *PriceLevel) void {
+        self.orders.deinit();
+    }
 };
 
-fn createOrder(id: u64, side: Side, quantity: u64, price: f64) Order {
+fn createOrder(id: u64, side: Side, quantity: u64, price: u64) Order {
     std.debug.assert(price > 0.0);
     std.debug.assert(quantity > 0);
 
@@ -55,7 +59,7 @@ fn createOrder(id: u64, side: Side, quantity: u64, price: f64) Order {
         .quantity = quantity,
         .price = price,
         .timestamp = @intCast(std.time.nanoTimestamp()),
-        .status = .new, // jab bhi order bane, status = new
+        .status = .new,
     };
 }
 
@@ -75,18 +79,30 @@ fn sideToString(side: Side) []const u8 {
     };
 }
 
+fn toTicks(price: f64) u64 {
+    return @intFromFloat(price * 100.0);
+}
+
 pub fn main() !void {
-    const allocator = std.heap.page_allocator;
-    var orders = std.ArrayList(Order).init(allocator);
-    defer orders.deinit();
+    const writer = std.io.getStdOut().writer();
+    const alloc = std.heap.page_allocator;
 
-    try orders.append(createOrder(1, .buy, 100, 150.50));
-    try orders.append(createOrder(2, .sell, 50, 152.00));
-    try orders.append(createOrder(3, .buy, 200, 145.00));
-    try orders.append(createOrder(4, .sell, 150, 148.50));
-    try orders.append(createOrder(5, .buy, 300, 150.00));
+    var level = PriceLevel.init(150.50, alloc);
+    defer level.deinit();
 
-    for (orders.items, 0..) |order, i| {
-        show("[{d}] ID: {d}, Side: {s}, Quantity: {d}, Price: {d}, Timestamp: {d}, Status: {s}\n", .{ i, order.id, sideToString(order.side), order.quantity, order.price, order.timestamp, statusToString(order.status) });
+    try level.addOrder(createOrder(1, .buy, 100, 150.50));
+    try level.addOrder(createOrder(4, .buy, 150, 150.50));
+    try level.addOrder(createOrder(7, .buy, 50, 150.50));
+
+    try writer.print("=== Price Level @ {d:.2} ===\n", .{level.price});
+    try writer.print("Total Orders: {d}\n", .{level.orders.items.len});
+    try writer.print("Total Quantity: {d}\n", .{level.totalQuantity()});
+
+    try writer.print("\nIndividual Orders:\n", .{});
+    for (level.orders.items) |order| {
+        try writer.print(
+            "  ID={d} | {s} | Qty={d}\n",
+            .{ order.id, sideToString(order.side), order.quantity },
+        );
     }
 }
