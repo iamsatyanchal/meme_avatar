@@ -220,7 +220,7 @@ const OrderBook = struct {
 
             if (!hitting) break;
 
-            var level = oppo_matching.get(best_price.?).?;
+            var level = oppo_matching.getPtr(best_price.?).?;
             var rest_orders = &level.orders.items[0];
 
             const trade_qty = @min(incoming.quantity, rest_orders.quantity);
@@ -238,13 +238,14 @@ const OrderBook = struct {
             if (rest_orders.quantity == 0) {
                 _ = level.orders.orderedRemove(0);
                 if (level.orders.items.len == 0) {
-                    _ = oppo_matching.remove(best_price.?);
                     level.deinit();
+                    _ = oppo_matching.remove(best_price.?);
+                    // level.deinit();
                 }
             }
-            if (incoming.quantity > 0) {
-                try self.addOrder(incoming.*);
-            }
+        }
+        if (incoming.quantity > 0) {
+            try self.addOrder(incoming.*);
         }
     }
 };
@@ -255,24 +256,19 @@ pub fn main() !void {
     var book = OrderBook.init(alloc);
     defer book.deinit();
 
-    // Trades store karne ke liye list
     var trades = std.ArrayList(Trade).init(alloc);
     defer trades.deinit();
 
-    show("\n[1] Adding some SELL orders first...\n", .{});
-    try book.addOrder(createOrder(10, .sell, 50, toTicks(152.00)));
-    try book.addOrder(createOrder(13, .sell, 20, toTicks(352.00)));
-    try book.addOrder(createOrder(11, .sell, 100, toTicks(151.50)));
-    try book.addOrder(createOrder(14, .buy, 20, toTicks(352.00)));
-
+    show("\n[1] Initial State: One SELL order of 30 shares @ 151.50\n", .{});
+    try book.addOrder(createOrder(11, .sell, 30, toTicks(151.50)));
     try book.print();
 
-    show("\n[2] Incoming BUY order: ID=20, Qty=80, Price=152.00\n", .{});
-
-    var new_buy = createOrder(20, .buy, 80, toTicks(152.00));
+    show("\n[2] Incoming BUY: 100 shares @ 152.00\n", .{});
+    // 30 match honge, 70 bachein
+    var new_buy = createOrder(20, .buy, 100, toTicks(152.00));
     try book.matchOrder(&new_buy, &trades);
 
-    show("\n[3] Trades Executed:\n", .{});
+    show("\n[3] Trades Executed (Sirf 30 hone chahiye):\n", .{});
     for (trades.items) |trade| {
         show("  BUY#{d} <-> SELL#{d} | Qty: {d} | Price: {d:.2}\n", .{
             trade.buy_order_id,
@@ -283,7 +279,8 @@ pub fn main() !void {
     }
 
     show("\n[4] Order Book AFTER Match:\n", .{});
+    show("(151.50 wala sell hatna chahiye, aur 70 shares BUY mein add hone chahiye 152.00 pe)\n", .{});
     try book.print();
 
-    show("\n[5] Check Incoming Order Status: Remaining Qty = {d}\n", .{new_buy.quantity});
+    show("\n[5] Incoming Order Remaining (70 hona chahiye): {d}\n", .{new_buy.quantity});
 }
