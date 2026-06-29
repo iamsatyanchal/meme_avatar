@@ -127,4 +127,41 @@ pub const OrderBook = struct {
             try self.addOrder(incoming.*);
         }
     }
+
+    pub fn cancelOrder(self: *OrderBook, order_id: u64) !bool {
+        const location = self.order_index.get(order_id) orelse return false;
+        _ = self.order_index.remove(order_id);
+
+        const mapping = if (location.side == .buy) &self.bids else &self.asks;
+
+        var level = mapping.getPtr(location.price).?;
+
+        var order_index_to_remove: ?usize = null;
+        for (level.orders.items, 0..) |order, i| {
+            if (order.id == order_id) {
+                order_index_to_remove = i;
+                break;
+            }
+        }
+
+        if (order_index_to_remove) |idx| {
+            _ = level.orders.orderedRemove(idx);
+            if (level.orders.items.len == 0) {
+                level.deinit();
+                _ = mapping.remove(location.price);
+            }
+        }
+
+        return true;
+    }
+
+    pub fn modifyOrder(self: *OrderBook, old_id: u64, new_id: u64, new_side: Side, new_qty: u64, new_price: u64, trades: *std.ArrayList(Trade)) !bool {
+        const cancelled = try self.cancelOrder(old_id);
+        if (!cancelled) return false;
+
+        var new_order = types.createOrder(new_id, new_side, new_qty, new_price);
+        try self.matchOrder(&new_order, trades);
+
+        return true;
+    }
 };

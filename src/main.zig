@@ -13,23 +13,34 @@ pub fn main() !void {
     var trades = std.ArrayList(types.Trade).init(alloc);
     defer trades.deinit();
 
-    show("\n[1] Initial State: One SELL order of 30 shares @ 151.50\n", .{});
-
+    show("\n[PHASE 1: MATCHING]\n", .{});
     try book.addOrder(types.createOrder(11, .sell, 30, types.toTicks(151.50)));
-
-    show("\n[2] Incoming BUY: 100 shares @ 152.00\n", .{});
     var new_buy = types.createOrder(20, .buy, 100, types.toTicks(152.00));
     try book.matchOrder(&new_buy, &trades);
 
-    show("\n[3] Trades Executed:\n", .{});
-    for (trades.items) |trade| {
-        show("  BUY#{d} <-> SELL#{d} | Qty: {d} | Price:{d:.2}\n", .{
-            trade.buy_order_id,
-            trade.sell_order_id,
-            trade.quantity,
-            types.toFloat(trade.price),
-        });
+    show("Trade Qty: {d}\n", .{trades.items[0].quantity});
+    show("Remaining Incoming Qty: {d}\n", .{new_buy.quantity});
+
+    show("\n[PHASE 2: CANCEL]\n", .{});
+    try book.addOrder(types.createOrder(50, .buy, 500, types.toTicks(150.00)));
+    show("Added Order 50. Cancelling now...\n", .{});
+
+    const cancelled = try book.cancelOrder(50);
+    if (cancelled) {
+        show("Order 50 Successfully Cancelled!\n", .{});
     }
 
-    show("\n[4] Incoming Order Remaining (70 hona chahiye): {d}\n", .{new_buy.quantity});
+    show("\n[PHASE 3: MODIFY]\n", .{});
+    try book.addOrder(types.createOrder(99, .sell, 100, types.toTicks(155.00)));
+
+    show("Modifying Order 99 (Qty 100 -> 50)...\n", .{});
+    _ = try book.modifyOrder(99, 100, .sell, 50, types.toTicks(155.00), &trades);
+
+    show("Order Book Updated. (Internally 99 cancelled, 100 added)\n", .{});
+
+    show("\n[PHASE 4: EDGE CASE]\n", .{});
+    const fake_cancel = try book.cancelOrder(9999); // Ye order exist nahi karta
+    if (!fake_cancel) {
+        show("Correctly handled: Order 9999 not found.\n", .{});
+    }
 }
